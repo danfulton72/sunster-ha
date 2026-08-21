@@ -1,7 +1,7 @@
 {
   "domain": "sunster_heater",
   "name": "Sunster Diesel Heater",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "config_flow": true,
   "dependencies": ["bluetooth"],
   "documentation": "https://github.com/danfulton72/sunster-ha",
