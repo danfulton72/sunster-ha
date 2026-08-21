@@ -9,26 +9,50 @@ from .const import DOMAIN
 
 
 DESCRIPTIONS = (
-    ("Temperature Offset", "temp_comp", None),
-    ("Back Light Level", "back_light", "supports_back_light"),
-    ("Start Temp Offset", "startup_temp_difference", "supports_startup_temp_difference"),
-    ("Stop Temp Offset", "shutdown_temp_difference", "supports_shutdown_temp_difference"),
+    ("Temperature Offset", "temp_comp", None, True),
+    ("Back Light Level", "back_light", "supports_back_light", False),
+    ("Start Temp Offset", "startup_temp_difference", "supports_startup_temp_difference", True),
+    ("Stop Temp Offset", "shutdown_temp_difference", "supports_shutdown_temp_difference", True),
 )
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([SunsterSettingNumber(entry.runtime_data, *desc) for desc in DESCRIPTIONS])
+    async_add_entities([
+        SunsterHeatLevel(entry.runtime_data),
+        *[SunsterSettingNumber(entry.runtime_data, *desc) for desc in DESCRIPTIONS],
+    ])
+
+
+class SunsterHeatLevel(CoordinatorEntity, NumberEntity):
+    _attr_name = "Heat Level"
+    _attr_native_min_value = 1
+    _attr_native_max_value = 10
+    _attr_native_step = 1
+    _attr_mode = "slider"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.address}_heat_level"
+        self._attr_device_info = {"identifiers": {(DOMAIN, coordinator.address)}}
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("set_level") or self.coordinator.data.get("current_level") or 1
+
+    async def async_set_native_value(self, value: float) -> None:
+        await self.coordinator.set_level(round(value))
 
 
 class SunsterSettingNumber(CoordinatorEntity, NumberEntity):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_native_step = 1
 
-    def __init__(self, coordinator, name, key, capability):
+    def __init__(self, coordinator, name, key, capability, enabled_default):
         super().__init__(coordinator)
         self._attr_name = name
         self.key = key
         self.capability = capability
+        self._attr_entity_registry_enabled_default = enabled_default
         self._attr_unique_id = f"{coordinator.address}_{key}"
         self._attr_device_info = {"identifiers": {(DOMAIN, coordinator.address)}}
 
