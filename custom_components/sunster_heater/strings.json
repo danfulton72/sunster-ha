@@ -1,1 +1,26 @@
-{"config":{"step":{"user":{"title":"Sunster heater","description":"Enter the BLE address and controller PIN.","data":{"address":"Bluetooth address","pin":"PIN"}}},"abort":{"already_configured":"This heater is already configured."}}}
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sunster heater",
+        "description": "Select a discovered Sunster heater and enter the controller PIN.",
+        "data": {
+          "address": "Discovered heater",
+          "pin": "PIN"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Set up {name}",
+        "description": "A Sunster diesel heater was discovered by Bluetooth. Enter the controller PIN to add it.",
+        "data": {
+          "pin": "PIN"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This heater is already configured.",
+      "no_devices_found": "No unconfigured Sunster heaters were found. Make sure the heater is powered on and within Bluetooth range, then try again.",
+      "not_supported": "The discovered Bluetooth device is not a supported Sunster heater."
+    }
+  }
+}
