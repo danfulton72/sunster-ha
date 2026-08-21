@@ -14,6 +14,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class SunsterPower(CoordinatorEntity, SwitchEntity):
     _attr_name = "Power"
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:radiator"
     def __init__(self, coordinator):
         super().__init__(coordinator)
