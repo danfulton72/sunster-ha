@@ -139,12 +139,7 @@ class SunsterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return self.data
         except Exception as err:
             self.data["connected"] = False
-            if self.client:
-                try:
-                    await self.client.disconnect()
-                except Exception:
-                    pass
-            self.client = None
+            await self._disconnect()
             if isinstance(err, UpdateFailed):
                 raise
             raise UpdateFailed(str(err)) from err
@@ -184,10 +179,20 @@ class SunsterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         changes[setting] = convert_temperature_setting(current, old_unit, new_unit)
         await self._send_control(self.protocol.update_settings(**changes))
 
+    async def _disconnect(self) -> None:
+        client = self.client
+        self.client = None
+        if not client:
+            return
+        try:
+            if client.is_connected:
+                try:
+                    await client.stop_notify(CHAR_UUID)
+                except Exception:
+                    _LOGGER.debug("Unable to stop Sunster notifications cleanly", exc_info=True)
+                await client.disconnect()
+        except Exception:
+            _LOGGER.debug("Unable to disconnect Sunster BLE client cleanly", exc_info=True)
+
     async def shutdown(self) -> None:
-        if self.client:
-            try:
-                await self.client.disconnect()
-            except Exception:
-                pass
-            self.client = None
+        await self._disconnect()
