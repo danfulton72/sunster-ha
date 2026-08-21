@@ -34,7 +34,7 @@ class SunsterModeSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def current_option(self):
-        return MODE_NAMES.get(self.coordinator.data.get("running_mode"))
+        return MODE_NAMES.get(self.coordinator.data.get("running_mode")) or MODE_NAMES.get(self.coordinator.protocol.last_mode)
 
     async def async_select_option(self, option: str) -> None:
         mode = next(mode for mode, name in MODE_NAMES.items() if name == option)
