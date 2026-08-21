@@ -4,7 +4,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 
 from .coordinator import SunsterCoordinator
 
-PLATFORMS = [Platform.SWITCH, Platform.CLIMATE, Platform.FAN, Platform.SENSOR, Platform.NUMBER, Platform.SELECT]
+PLATFORMS = [Platform.SWITCH, Platform.CLIMATE, Platform.SENSOR, Platform.NUMBER, Platform.SELECT]
 
 
 async def async_setup_entry(hass, entry):
