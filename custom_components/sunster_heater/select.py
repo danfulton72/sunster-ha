@@ -21,7 +21,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class SunsterModeSelect(CoordinatorEntity, SelectEntity):
     _attr_name = "Operating Mode"
-    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator):
         super().__init__(coordinator)
