@@ -46,8 +46,6 @@ class SunsterProtocol:
         self.last_mode = 1
         self.last_param = 5
         self.is_on = False
-        # Values in settings are kept in the exact on-wire representation so
-        # unsupported/capability bytes survive settings and time-sync writes.
         self.settings: dict[str, Any] = {}
 
     def encrypt(self, packet: bytes | bytearray) -> bytearray:
@@ -82,11 +80,9 @@ class SunsterProtocol:
         return self._wrap(self._feaa(0x00, 0x00))
 
     def device_info(self) -> bytearray:
-        # APK V2.1 cmd 00/03 returns product, language mask and key-mode data.
         return self._wrap(self._feaa(0x00, 0x03))
 
     def command_key(self, packet: bytes | bytearray) -> tuple[int, int] | None:
-        """Return the request command tuple from a packet sent by this integration."""
         raw = self.decrypt(packet) if self.v21 else bytearray(packet)
         if len(raw) < 8 or raw[0:2] != b"\xFE\xAA":
             return None
@@ -109,9 +105,6 @@ class SunsterProtocol:
         return self._wrap(self._feaa(0x01, 0x01 if self.is_on else 0x00, payload))
 
     def set_mode(self, mode: int) -> bytearray:
-        # Match the app's local V2.1 mode-switch behavior: temperature mode
-        # restores/defaults a temperature, level/ventilation restore/default a
-        # gear, and high-heat leaves the existing run parameter untouched.
         if mode == 2:
             unit, _ = _unit_value(self._setting("temp_unit_raw", 0))
             param = self.last_param if self.last_mode == 2 else (75 if unit == 1 else 24)
@@ -131,12 +124,6 @@ class SunsterProtocol:
         return int(default if value is None else value) & 0xFF
 
     def _encoded_unit(self, raw_name: str, *, altitude: bool = False) -> int:
-        """Encode unit settings exactly as the V2.1 app does.
-
-        Configurable units are written as 0/1. Fixed-unit controllers report an
-        F-nibble capability marker and must be written back as 0x80/0x81, not
-        the raw F0/F1/F2/F3 status byte.
-        """
         raw = self._setting(raw_name, 0)
         value, configurable = _unit_value(raw)
         normalized = 1 if (value in (1, 3) if altitude else value == 1) else 0
@@ -181,14 +168,7 @@ class SunsterProtocol:
 
     @staticmethod
     def modes_for_mainboard(mainboard_type: int) -> tuple[int, ...]:
-        return {
-            0: (1, 2),
-            1: (1, 2, 3, 4),
-            10: (1, 2, 4),
-            11: (1, 2, 3),
-            20: (1, 2),
-            21: (1, 2, 3),
-        }.get(mainboard_type, (1, 2))
+        return {0: (1, 2), 1: (1, 2, 3, 4), 10: (1, 2, 4), 11: (1, 2, 3), 20: (1, 2), 21: (1, 2, 3)}.get(mainboard_type, (1, 2))
 
     def parse_notification(self, data: bytearray) -> dict[str, Any] | None:
         if len(data) >= 2 and data[0:2] == b"\xAA\x77":
@@ -202,25 +182,30 @@ class SunsterProtocol:
 
         response_cmd = (raw[6] - 0x80, raw[7]) if 0x80 <= raw[6] <= 0x86 else None
         if response_cmd == (0, 3):
-            if len(raw) < 27:
+            if len(raw) < 24:
                 return {"_response_cmd": response_cmd}
+            product_part_number = f"{int.from_bytes(raw[8:12], 'little'):08x}"
             language_markers = _u16(raw[16], raw[17])
             language_options = [0] + [bit + 1 for bit in range(7) if language_markers & (1 << bit)]
-            key_mode = raw[26]
             result: dict[str, Any] = {
                 "_response_cmd": response_cmd,
-                "product_part_number": f"{int.from_bytes(raw[8:12], 'little'):08x}",
+                "product_part_number": product_part_number,
                 "device_hardware_version": _u16(raw[12], raw[13]),
                 "device_software_version": _u16(raw[14], raw[15]),
                 "language_markers": language_markers,
                 "language_options": tuple(language_options),
-                "chip_type": _u16(raw[24], raw[25]),
-                "key_mode": key_mode,
             }
-            if key_mode & 0x80:
-                modes = tuple(mode for bit, mode in enumerate((1, 2, 3, 4)) if key_mode & (1 << bit))
-                if modes:
-                    result["available_modes"] = modes
+            if product_part_number == "11240905":
+                result.update({"supports_fuel_tank": False, "supports_pump_model": False, "supports_co": False, "supports_remaining_runtime": False})
+            if len(raw) >= 26:
+                result["chip_type"] = _u16(raw[24], raw[25])
+            if len(raw) >= 27:
+                key_mode = raw[26]
+                result["key_mode"] = key_mode
+                if key_mode & 0x80:
+                    modes = tuple(mode for bit, mode in enumerate((1, 2, 3, 4)) if key_mode & (1 << bit))
+                    if modes:
+                        result["available_modes"] = modes
             return result
 
         if len(raw) < 46:
@@ -268,9 +253,8 @@ class SunsterProtocol:
             "voltage": _u16(raw[23], raw[24]) / 10,
             "heater_temperature": _i16(raw[25], raw[26]) / 10,
             "co": None if co_value >= 6553 else co_value,
+            "supports_co": co_value < 6553,
             "power_field": raw[29],
-            "hardware_version": _u16(raw[30], raw[31]),
-            "software_version": _u16(raw[32], raw[33]),
             "temp_comp": _i8(raw[34]),
             "broadcast_language": raw[35],
             "supports_language": raw[35] != UNSUPPORTED,
@@ -290,6 +274,12 @@ class SunsterProtocol:
             "remaining_runtime": None if _u16(raw[44], raw[45]) == 0xFFFF else _u16(raw[44], raw[45]),
             "supports_remaining_runtime": _u16(raw[44], raw[45]) != 0xFFFF,
         }
+        hardware_version = _u16(raw[30], raw[31])
+        software_version = _u16(raw[32], raw[33])
+        if hardware_version:
+            parsed["hardware_version"] = hardware_version
+        if software_version:
+            parsed["software_version"] = software_version
 
         if run_mode in (1, 3):
             parsed["set_level"] = max(1, min(10, run_param))
