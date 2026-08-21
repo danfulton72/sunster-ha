@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
+import math
 from typing import Any
 
 SUNSTER_KEY = b"passwordA2409PW"
@@ -28,6 +29,14 @@ def _unit_value(raw: int) -> tuple[int, bool]:
     return raw & 0x0F, ((raw >> 4) & 0x0F) != 0x0F
 
 
+def convert_temperature_setting(value: int | float, from_unit: int, to_unit: int) -> int:
+    """Convert an offset/differential using the Sunster app's Math.round rules."""
+    if from_unit == to_unit:
+        return int(value)
+    factor = 1.8 if from_unit == 0 and to_unit == 1 else (1 / 1.8)
+    return math.floor(float(value) * factor + 0.5)
+
+
 class SunsterProtocol:
     """Sunster S-A2409PRO / V2.1 FEAA+CBFF protocol."""
 
@@ -37,6 +46,8 @@ class SunsterProtocol:
         self.last_mode = 1
         self.last_param = 5
         self.is_on = False
+        # Values in settings are kept in the exact on-wire representation so
+        # unsupported/capability bytes survive settings and time-sync writes.
         self.settings: dict[str, Any] = {}
 
     def encrypt(self, packet: bytes | bytearray) -> bytearray:
@@ -71,9 +82,11 @@ class SunsterProtocol:
         return self._wrap(self._feaa(0x00, 0x00))
 
     def device_info(self) -> bytearray:
+        # APK V2.1 cmd 00/03 returns product, language mask and key-mode data.
         return self._wrap(self._feaa(0x00, 0x03))
 
     def command_key(self, packet: bytes | bytearray) -> tuple[int, int] | None:
+        """Return the request command tuple from a packet sent by this integration."""
         raw = self.decrypt(packet) if self.v21 else bytearray(packet)
         if len(raw) < 8 or raw[0:2] != b"\xFE\xAA":
             return None
@@ -96,13 +109,19 @@ class SunsterProtocol:
         return self._wrap(self._feaa(0x01, 0x01 if self.is_on else 0x00, payload))
 
     def set_mode(self, mode: int) -> bytearray:
-        if mode in (1, 3, 4):
-            param = self.last_param if self.last_mode in (1, 3, 4) else 5
+        # Match the app's local V2.1 mode-switch behavior: temperature mode
+        # restores/defaults a temperature, level/ventilation restore/default a
+        # gear, and high-heat leaves the existing run parameter untouched.
+        if mode == 2:
+            unit, _ = _unit_value(self._setting("temp_unit_raw", 0))
+            param = self.last_param if self.last_mode == 2 else (75 if unit == 1 else 24)
+        elif mode in (1, 3):
+            param = self.last_param if self.last_mode in (1, 3) and 1 <= self.last_param <= 10 else 1
         else:
-            param = self.last_param if self.last_mode == 2 else 21
+            param = self.last_param
         self.last_mode = mode
         self.last_param = param
-        payload = bytes([mode, param, 0xFF, 0xFF])
+        payload = bytes([mode, param & 0xFF, 0xFF, 0xFF])
         return self._wrap(self._feaa(0x01, 0x01 if self.is_on else 0x00, payload))
 
     def _setting(self, name: str, default: int) -> int:
@@ -110,6 +129,18 @@ class SunsterProtocol:
         if isinstance(value, bool):
             value = int(value)
         return int(default if value is None else value) & 0xFF
+
+    def _encoded_unit(self, raw_name: str, *, altitude: bool = False) -> int:
+        """Encode unit settings exactly as the V2.1 app does.
+
+        Configurable units are written as 0/1. Fixed-unit controllers report an
+        F-nibble capability marker and must be written back as 0x80/0x81, not
+        the raw F0/F1/F2/F3 status byte.
+        """
+        raw = self._setting(raw_name, 0)
+        value, configurable = _unit_value(raw)
+        normalized = 1 if (value in (1, 3) if altitude else value == 1) else 0
+        return normalized if configurable else 0x80 | normalized
 
     def _settings_payload(self, *, current_time: int = 0, date: datetime | None = None) -> bytes:
         if date is not None:
@@ -123,8 +154,8 @@ class SunsterProtocol:
             oil_volume = self._setting("oil_volume", UNSUPPORTED)
             pump_model = self._setting("pump_model", UNSUPPORTED)
         return bytes([
-            self._setting("altitude_unit_raw", 0),
-            self._setting("temp_unit_raw", 0),
+            self._encoded_unit("altitude_unit_raw", altitude=True),
+            self._encoded_unit("temp_unit_raw"),
             current_time & 0xFF, (current_time >> 8) & 0xFF,
             temp_comp, language, oil_volume, pump_model,
             self._setting("back_light", UNSUPPORTED),
@@ -199,8 +230,18 @@ class SunsterProtocol:
         run_state, run_mode, run_param = raw[10], raw[11], raw[12]
         now_gear, run_step = raw[13], raw[14]
         fault_display, fault_code = raw[15], raw[16]
-        temp_unit, supports_temp_unit = _unit_value(raw[17])
-        altitude_unit, supports_altitude_unit = _unit_value(raw[20])
+        temp_unit_raw, supports_temp_unit = _unit_value(raw[17])
+        altitude_unit_raw, supports_altitude_unit = _unit_value(raw[20])
+        temp_unit = 1 if temp_unit_raw == 1 else 0
+        altitude_unit = 1 if altitude_unit_raw in (1, 3) else 0
+        altitude_raw = _u16(raw[21], raw[22])
+        altitude = altitude_raw if protocol_version == 1 else altitude_raw / 10
+        co_value = _u16(raw[27], raw[28]) / 10
+        fault_type = ("XMZ", "TY", "DD1", "DD2")[(fault_display >> 6) & 0x03]
+        error_code = fault_display & 0x3F
+        if fault_code >= 128:
+            error_code = fault_display
+            fault_type = {128: "XMZ", 129: "TY", 130: "JW"}.get(fault_code, fault_type)
         on = run_state in (2, 5, 6)
 
         parsed: dict[str, Any] = {
@@ -216,17 +257,17 @@ class SunsterProtocol:
             "current_level": now_gear,
             "fault_display": fault_display,
             "fault_code": fault_code,
-            "error_code": fault_display if fault_code >= 128 else (fault_display & 0x3F),
-            "fault_type": ("XMZ", "TY", "DD1", "DD2")[(fault_display >> 6) & 0x03],
+            "error_code": error_code,
+            "fault_type": fault_type,
             "temp_unit": temp_unit,
             "supports_temp_unit": supports_temp_unit,
             "ambient_temperature": _i16(raw[18], raw[19]),
             "altitude_unit": altitude_unit,
             "supports_altitude_unit": supports_altitude_unit,
-            "altitude": _u16(raw[21], raw[22]),
+            "altitude": altitude,
             "voltage": _u16(raw[23], raw[24]) / 10,
             "heater_temperature": _i16(raw[25], raw[26]) / 10,
-            "co": _u16(raw[27], raw[28]) / 10,
+            "co": None if co_value >= 6553 else co_value,
             "power_field": raw[29],
             "hardware_version": _u16(raw[30], raw[31]),
             "software_version": _u16(raw[32], raw[33]),
@@ -250,10 +291,11 @@ class SunsterProtocol:
             "supports_remaining_runtime": _u16(raw[44], raw[45]) != 0xFFFF,
         }
 
-        if run_mode in (1, 3, 4):
+        if run_mode in (1, 3):
             parsed["set_level"] = max(1, min(10, run_param))
         elif run_mode == 2:
-            parsed["set_temp"] = run_param
+            minimum, maximum = ((46, 97) if temp_unit == 1 else (8, 36))
+            parsed["set_temp"] = max(minimum, min(maximum, run_param))
             parsed["set_level"] = max(1, min(10, now_gear))
 
         self.is_on = on
