@@ -18,6 +18,7 @@ class Description:
     state_class: SensorStateClass | None = None
     diagnostic: bool = False
     capability: str | None = None
+    enabled_default: bool = True
 
 
 SENSORS = (
@@ -25,7 +26,7 @@ SENSORS = (
     Description("Heater Temperature", "heater_temperature", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT),
     Description("Supply Voltage", "voltage", UnitOfElectricPotential.VOLT, SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT),
     Description("Altitude", "altitude", None, None, SensorStateClass.MEASUREMENT),
-    Description("CO", "co", "ppm", None, SensorStateClass.MEASUREMENT),
+    Description("CO", "co", "ppm", None, SensorStateClass.MEASUREMENT, False, "supports_co"),
     Description("Current Level", "current_level"),
     Description("Remaining Runtime", "remaining_runtime", "min", None, None, False, "supports_remaining_runtime"),
     Description("Run Step", "running_step", diagnostic=True),
@@ -59,12 +60,13 @@ class SunsterSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = desc.unit
         self._attr_device_class = desc.device_class
         self._attr_state_class = desc.state_class
+        self._attr_entity_registry_enabled_default = desc.enabled_default
         if desc.diagnostic:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def available(self):
-        return super().available and (not self.desc.capability or bool(self.coordinator.data.get(self.desc.capability)))
+        return super().available and (not self.desc.capability or bool(self.coordinator.data.get(self.desc.capability))) and self.coordinator.data.get(self.desc.key) is not None
 
     @property
     def native_unit_of_measurement(self):

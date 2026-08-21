@@ -38,10 +38,10 @@ class ProtocolTests(unittest.TestCase):
         raw[27:29] = (12).to_bytes(2, "little")
         raw[30:32] = (0x0102).to_bytes(2, "little")
         raw[32:34] = (0x0203).to_bytes(2, "little")
-        raw[34] = 0xFE  # -2 temp compensation
+        raw[34] = 0xFE
         raw[35] = 1
-        raw[36] = 0xFF  # no fuel tank
-        raw[37] = 0xFF  # no pump-model feature
+        raw[36] = 0xFF
+        raw[37] = 0xFF
         raw[38] = 5
         raw[39] = 2
         raw[40] = 3
@@ -55,7 +55,6 @@ class ProtocolTests(unittest.TestCase):
     def test_v21_status_layout_and_no_tank_capability(self):
         protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
         data = protocol.parse_notification(self.make_status())
-        self.assertIsNotNone(data)
         assert data is not None
         self.assertEqual(data["_response_cmd"], (0, 0))
         self.assertEqual(data["mainboard_type"], 11)
@@ -103,21 +102,21 @@ class ProtocolTests(unittest.TestCase):
         protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
         protocol.parse_notification(self.make_status())
         packet = protocol.update_settings(back_light=4)
-        self.assertEqual(packet[6:8], bytes([3, 1]))
         payload = packet[8:-1]
-        self.assertEqual(payload[6], 0xFF)  # oil_volume
-        self.assertEqual(payload[7], 0xFF)  # pump_model
-        self.assertEqual(payload[8], 4)     # back_light
-        self.assertEqual(payload[9], 2)     # startup differential preserved
-        self.assertEqual(payload[10], 3)    # shutdown differential preserved
-        self.assertEqual(payload[11], 1)    # wifi preserved
-        self.assertEqual(payload[12], 0)    # auto start/stop preserved
+        self.assertEqual(packet[6:8], bytes([3, 1]))
+        self.assertEqual(payload[6], 0xFF)
+        self.assertEqual(payload[7], 0xFF)
+        self.assertEqual(payload[8], 4)
+        self.assertEqual(payload[9], 2)
+        self.assertEqual(payload[10], 3)
+        self.assertEqual(payload[11], 1)
+        self.assertEqual(payload[12], 0)
 
     def test_fixed_unit_capability_bytes_use_apk_write_encoding(self):
         protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
         raw = self.make_status()
-        raw[17] = 0xF1  # fixed Fahrenheit
-        raw[20] = 0xF3  # fixed feet variant
+        raw[17] = 0xF1
+        raw[20] = 0xF3
         data = protocol.parse_notification(raw)
         assert data is not None
         self.assertEqual(data["temp_unit"], 1)
@@ -139,7 +138,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(payload[4], 2026 & 0xFF)
         self.assertEqual(payload[5], 8)
         self.assertEqual(payload[6], 21)
-        self.assertEqual(payload[7], 5)  # Friday: JS Date.getDay() value
+        self.assertEqual(payload[7], 5)
         self.assertEqual(payload[8], 5)
         self.assertEqual(payload[11], 1)
 
@@ -147,16 +146,34 @@ class ProtocolTests(unittest.TestCase):
         protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
         packet = protocol.set_mode(2)
         self.assertEqual(packet[8:10], bytes([2, 24]))
-
         protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
         protocol.settings["temp_unit_raw"] = 1
         packet = protocol.set_mode(2)
         self.assertEqual(packet[8:10], bytes([2, 75]))
-
         protocol.last_mode = 2
         protocol.last_param = 21
         packet = protocol.set_mode(4)
         self.assertEqual(packet[8:10], bytes([4, 21]))
+
+    def test_short_device_info_frame_for_11240905(self):
+        protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
+        raw = bytearray(25)
+        raw[0:2] = b"\xfe\xaa"
+        raw[6:8] = bytes([0x80, 0x03])
+        raw[8:12] = bytes([0x05, 0x09, 0x24, 0x11])
+        raw[12:14] = (0).to_bytes(2, "little")
+        raw[14:16] = (4).to_bytes(2, "little")
+        raw[16:18] = (13).to_bytes(2, "little")
+        data = protocol.parse_notification(raw)
+        assert data is not None
+        self.assertEqual(data["product_part_number"], "11240905")
+        self.assertEqual(data["device_software_version"], 4)
+        self.assertFalse(data["supports_fuel_tank"])
+        self.assertFalse(data["supports_pump_model"])
+        self.assertFalse(data["supports_co"])
+        self.assertFalse(data["supports_remaining_runtime"])
+        self.assertNotIn("chip_type", data)
+        self.assertNotIn("key_mode", data)
 
     def test_temperature_setting_conversion_matches_app(self):
         self.assertEqual(convert_temperature_setting(5, 0, 1), 9)
