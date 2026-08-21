@@ -24,7 +24,8 @@ def _normalise_address(address: str) -> str:
 def _is_sunster(discovery_info: BluetoothServiceInfoBleak) -> bool:
     """Return True when an advertisement exposes the Sunster BLE service."""
     return SERVICE_UUID.lower() in {
-        service_uuid.lower() for service_uuid in discovery_info.service_uuids
+        service_uuid.lower()
+        for service_uuid in (discovery_info.service_uuids or [])
     }
 
 
