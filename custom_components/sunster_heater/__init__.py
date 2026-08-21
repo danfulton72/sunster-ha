@@ -4,7 +4,8 @@ from homeassistant.exceptions import ConfigEntryNotReady
 
 from .coordinator import SunsterCoordinator
 
-PLATFORMS = [Platform.SWITCH, Platform.CLIMATE, Platform.FAN, Platform.SENSOR]
+PLATFORMS = [Platform.SWITCH, Platform.CLIMATE, Platform.FAN, Platform.SENSOR, Platform.NUMBER, Platform.SELECT]
+
 
 async def async_setup_entry(hass, entry):
     address = entry.data[CONF_ADDRESS]
@@ -18,8 +19,10 @@ async def async_setup_entry(hass, entry):
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True
 
+
 async def _reload(hass, entry):
     await hass.config_entries.async_reload(entry.entry_id)
+
 
 async def async_unload_entry(hass, entry):
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
