@@ -8,6 +8,7 @@ This integration was built from packet traces produced by a real S-A2409PRO cont
 
 Validated/control paths include:
 
+- Bluetooth auto-discovery via the advertised FFE0 service
 - AA55 wake-up and AA77 V2.1 detection
 - encrypted FEAA handshake
 - encrypted status parsing
@@ -49,9 +50,11 @@ Fuel tank and pump-model fields are decoded so their capability state is preserv
 
 ## Installation
 
-Add this repository to HACS as a custom repository of category **Integration**, install it, restart Home Assistant, then add **Sunster Diesel Heater** from Settings → Devices & services.
+Add this repository to HACS as a custom repository of category **Integration**, install it, and restart Home Assistant. With the heater powered on and in Bluetooth range, Home Assistant should automatically discover **Sunster Diesel Heater** and offer a setup notification. Select it and enter the controller PIN (default `1234`).
 
-Manual installation: copy `custom_components/sunster_heater` to `/config/custom_components/sunster_heater` and restart Home Assistant.
+You can also go to **Settings → Devices & services → Add Integration → Sunster Diesel Heater**. The setup flow performs an active Bluetooth scan and presents discovered heaters in a picker; you do not need to know or type the Bluetooth address.
+
+Manual installation: copy `custom_components/sunster_heater` to `/config/custom_components/sunster_heater` and restart Home Assistant. Bluetooth discovery works the same way after restart.
 
 ## Debug logging
 
@@ -85,7 +88,7 @@ The Controller Wi-Fi entity is disabled by default because changing that setting
 
 ## Tests
 
-Protocol tests cover the V2.1 status field layout, no-tank capability handling, settings preservation and APK-compatible time synchronization.
+Protocol tests cover the V2.1 status field layout, no-tank capability handling, settings preservation and APK-compatible time synchronization. CI also checks that the Bluetooth discovery flow and FFE0 manifest matcher remain present.
 
 ## Credits
 
