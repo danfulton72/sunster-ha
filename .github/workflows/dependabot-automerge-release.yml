@@ -1,0 +1,165 @@
+name: Dependabot minor and patch auto-merge
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+concurrency:
+  group: dependabot-automerge-release
+  cancel-in-progress: false
+
+jobs:
+  merge-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge one eligible Dependabot pull request
+        id: merge
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const acceptable = new Set(["success", "neutral", "skipped"]);
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+
+            for (const pr of prs) {
+              if (pr.user?.login !== "dependabot[bot]" || pr.draft) continue;
+
+              const { data: candidate } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pr.number,
+              });
+              const body = candidate.body || "";
+              if (!/update-type:\s+version-update:semver-(minor|patch)/i.test(body)) {
+                continue;
+              }
+              if (candidate.mergeable !== true) continue;
+              if (["dirty", "blocked", "behind", "draft"].includes(candidate.mergeable_state)) {
+                continue;
+              }
+
+              const { data: checkData } = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: candidate.head.sha,
+                per_page: 100,
+              });
+              const checks = checkData.check_runs;
+              if (checks.length === 0) continue;
+              if (checks.some((check) => check.status !== "completed" || !acceptable.has(check.conclusion))) {
+                continue;
+              }
+
+              const { data: statusData } = await github.rest.repos.getCombinedStatusForRef({
+                owner,
+                repo,
+                ref: candidate.head.sha,
+              });
+              if (statusData.total_count > 0 && statusData.state !== "success") continue;
+
+              const { data: merged } = await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: candidate.number,
+                merge_method: "squash",
+                sha: candidate.head.sha,
+                commit_title: `chore(deps): merge Dependabot #${candidate.number}`,
+              });
+              if (!merged.merged) {
+                core.warning(`Dependabot #${candidate.number} was eligible but GitHub did not merge it.`);
+                continue;
+              }
+
+              core.setOutput("merged", "true");
+              core.setOutput("pr_number", String(candidate.number));
+              core.setOutput("merge_sha", merged.sha);
+              core.notice(`Merged Dependabot #${candidate.number} at ${merged.sha}.`);
+              return;
+            }
+
+            core.setOutput("merged", "false");
+            core.notice("No green minor or patch Dependabot pull request is ready to merge.");
+
+      - name: Check out updated default branch
+        if: steps.merge.outputs.merged == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Prepare patch release
+        if: steps.merge.outputs.merged == 'true'
+        id: release
+        shell: bash
+        run: |
+          git fetch --force --tags origin
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          manifests = list(Path("custom_components").glob("*/manifest.json"))
+          if len(manifests) != 1:
+              raise SystemExit(f"Expected exactly one integration manifest, found {len(manifests)}")
+
+          manifest = manifests[0]
+          data = json.loads(manifest.read_text())
+          current = str(data["version"])
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", current)
+          if not match:
+              raise SystemExit(f"Manifest version is not semantic X.Y.Z: {current}")
+
+          versions = [tuple(map(int, match.groups()))]
+          tags = subprocess.check_output(["git", "tag", "--list"], text=True).splitlines()
+          for tag in tags:
+              tag_match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag)
+              if tag_match:
+                  versions.append(tuple(map(int, tag_match.groups())))
+
+          major, minor, patch = max(versions)
+          new_version = f"{major}.{minor}.{patch + 1}"
+          text = manifest.read_text()
+          pattern = re.compile(r'("version"\s*:\s*")' + re.escape(current) + r'(")')
+          text, count = pattern.subn(rf'\g<1>{new_version}\g<2>', text, count=1)
+          if count != 1:
+              raise SystemExit("Could not update manifest version")
+          manifest.write_text(text)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"manifest={manifest.as_posix()}\n")
+              output.write(f"version={new_version}\n")
+              output.write(f"tag=v{new_version}\n")
+          PY
+
+      - name: Commit, tag, and publish release
+        if: steps.merge.outputs.merged == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          MANIFEST: ${{ steps.release.outputs.manifest }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$MANIFEST"
+          git commit -m "chore: release $TAG [skip ci]"
+          git push origin "HEAD:$DEFAULT_BRANCH"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "refs/tags/$TAG"
+          gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes
