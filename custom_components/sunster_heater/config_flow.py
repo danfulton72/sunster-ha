@@ -10,8 +10,10 @@ from homeassistant import config_entries
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.const import CONF_ADDRESS
+from homeassistant.core import callback
 
-from .const import CONF_PIN, DEFAULT_PIN, DOMAIN, SERVICE_UUID
+from .const import CONF_FUEL_MAX_RATE, CONF_FUEL_MIN_RATE, CONF_PIN, DEFAULT_PIN, DOMAIN, SERVICE_UUID
+from .fuel import DEFAULT_MAX_RATE, DEFAULT_MIN_RATE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +43,12 @@ class SunsterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle configuration for a Sunster heater."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Return the options flow for fuel-consumption calibration."""
+        return SunsterOptionsFlow()
 
     def __init__(self) -> None:
         self._discovery_info: BluetoothServiceInfoBleak | None = None
@@ -144,4 +152,37 @@ class SunsterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                 }
             ),
+        )
+
+
+_RATE = vol.All(vol.Coerce(float), vol.Range(min=0.01, max=5.0))
+
+
+class SunsterOptionsFlow(config_entries.OptionsFlow):
+    """Calibrate the estimated fuel consumption at levels 1 and 10."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input[CONF_FUEL_MIN_RATE] > user_input[CONF_FUEL_MAX_RATE]:
+                errors["base"] = "invalid_fuel_rates"
+            else:
+                return self.async_create_entry(data=user_input)
+
+        options = self.config_entry.options
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_FUEL_MIN_RATE,
+                        default=options.get(CONF_FUEL_MIN_RATE, DEFAULT_MIN_RATE),
+                    ): _RATE,
+                    vol.Required(
+                        CONF_FUEL_MAX_RATE,
+                        default=options.get(CONF_FUEL_MAX_RATE, DEFAULT_MAX_RATE),
+                    ): _RATE,
+                }
+            ),
+            errors=errors,
         )

@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import UnitOfElectricPotential, UnitOfTemperature
+from homeassistant.components.sensor import RestoreSensor, SensorDeviceClass, SensorEntity, SensorStateClass
+from homeassistant.const import UnitOfElectricPotential, UnitOfTemperature, UnitOfVolume
+from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
+from .const import CONF_FUEL_MAX_RATE, CONF_FUEL_MIN_RATE, DOMAIN
+from .fuel import DEFAULT_MAX_RATE, DEFAULT_MIN_RATE, fuel_rate, litres_used
+
+# Diagnostic sensors that earlier versions created and this version no longer does.
+REMOVED_SENSOR_KEYS = ("protocol_version", "software_version", "chip_type", "key_mode")
 
 
 @dataclass(frozen=True)
@@ -33,19 +40,27 @@ SENSORS = (
     Description("Fault Code", "fault_code", diagnostic=True),
     Description("Fault Type", "fault_type", diagnostic=True),
     Description("Running Mode", "running_mode", diagnostic=True),
-    Description("Protocol Version", "protocol_version", diagnostic=True),
     Description("Mainboard Type", "mainboard_type", diagnostic=True),
     Description("Hardware Version", "hardware_version", diagnostic=True),
-    Description("Software Version", "software_version", diagnostic=True),
     Description("Heater Mode", "heater_mode", diagnostic=True),
     Description("Product Part Number", "product_part_number", diagnostic=True),
-    Description("Chip Type", "chip_type", diagnostic=True),
-    Description("Key Mode", "key_mode", diagnostic=True),
 )
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([SunsterSensor(entry.runtime_data, desc) for desc in SENSORS])
+    coordinator = entry.runtime_data
+    registry = er.async_get(hass)
+    for key in REMOVED_SENSOR_KEYS:
+        entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"{coordinator.address}_{key}")
+        if entity_id:
+            registry.async_remove(entity_id)
+
+    min_rate = float(entry.options.get(CONF_FUEL_MIN_RATE, DEFAULT_MIN_RATE))
+    max_rate = float(entry.options.get(CONF_FUEL_MAX_RATE, DEFAULT_MAX_RATE))
+    entities: list[SensorEntity] = [SunsterSensor(coordinator, desc) for desc in SENSORS]
+    entities.append(SunsterFuelRateSensor(coordinator, min_rate, max_rate))
+    entities.append(SunsterFuelUsedSensor(coordinator, min_rate, max_rate))
+    async_add_entities(entities)
 
 
 class SunsterSensor(CoordinatorEntity, SensorEntity):
@@ -77,3 +92,79 @@ class SunsterSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         return self.coordinator.data.get(self.desc.key)
+
+
+class _SunsterFuelBase(CoordinatorEntity):
+    def __init__(self, coordinator, key: str, name: str, min_rate: float, max_rate: float):
+        super().__init__(coordinator)
+        self._min_rate = min_rate
+        self._max_rate = max_rate
+        self._attr_name = name
+        self._attr_unique_id = f"{coordinator.address}_{key}"
+        self._attr_device_info = {"identifiers": {(DOMAIN, coordinator.address)}}
+        self._attr_icon = "mdi:fuel"
+
+    def _current_rate(self) -> float:
+        if not self.coordinator.last_update_success:
+            return 0.0
+        return fuel_rate(self.coordinator.data or {}, self._min_rate, self._max_rate)
+
+
+class SunsterFuelRateSensor(_SunsterFuelBase, SensorEntity):
+    """Estimated diesel consumption right now, from the current heater level."""
+
+    _attr_native_unit_of_measurement = "L/h"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 3
+
+    def __init__(self, coordinator, min_rate: float, max_rate: float):
+        super().__init__(coordinator, "fuel_rate", "Fuel Consumption Rate", min_rate, max_rate)
+
+    @property
+    def native_value(self):
+        return self._current_rate()
+
+
+class SunsterFuelUsedSensor(_SunsterFuelBase, RestoreSensor):
+    """Estimated diesel burnt in total, integrated from the consumption rate."""
+
+    _attr_native_unit_of_measurement = UnitOfVolume.LITERS
+    _attr_device_class = SensorDeviceClass.VOLUME
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator, min_rate: float, max_rate: float):
+        super().__init__(coordinator, "fuel_used", "Fuel Used", min_rate, max_rate)
+        self._total = 0.0
+        self._last_rate = 0.0
+        self._last_time: float | None = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_sensor_data()
+        if last is not None and last.native_value is not None:
+            try:
+                self._total = max(0.0, float(last.native_value))
+            except (TypeError, ValueError):
+                self._total = 0.0
+        self._last_rate = self._current_rate()
+        self._last_time = time.monotonic()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        now = time.monotonic()
+        if self._last_time is not None:
+            # Left Riemann sum: the rate seen at the previous update applies until now.
+            self._total += litres_used(self._last_rate, now - self._last_time)
+        self._last_rate = self._current_rate()
+        self._last_time = now
+        super()._handle_coordinator_update()
+
+    @property
+    def available(self):
+        # The running total stays meaningful while the heater is out of range.
+        return True
+
+    @property
+    def native_value(self):
+        return round(self._total, 4)
