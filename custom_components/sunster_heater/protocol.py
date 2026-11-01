@@ -99,9 +99,12 @@ class SunsterProtocol:
         return self._wrap(self._feaa(0x01, 0x01 if self.is_on else 0x00, payload))
 
     def set_level(self, level: int) -> bytearray:
-        self.last_mode = 1
+        # In ventilation mode the level byte is the fan speed, so keep the mode;
+        # sending mode 1 would switch the heater from fan-only to burning.
+        mode = 3 if self.last_mode == 3 else 1
+        self.last_mode = mode
         self.last_param = level
-        payload = bytes([1, level & 0xFF, 0xFF, 0xFF])
+        payload = bytes([mode, level & 0xFF, 0xFF, 0xFF])
         return self._wrap(self._feaa(0x01, 0x01 if self.is_on else 0x00, payload))
 
     def set_mode(self, mode: int) -> bytearray:
