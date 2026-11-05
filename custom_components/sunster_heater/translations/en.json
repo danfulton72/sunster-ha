@@ -22,5 +22,20 @@
       "no_devices_found": "No unconfigured Sunster heaters were found. Make sure the heater is powered on and within Bluetooth range, then try again.",
       "not_supported": "The discovered Bluetooth device is not a supported Sunster heater."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fuel consumption",
+        "description": "Estimated diesel use is interpolated between these rates for heater levels 1 to 10. The defaults are the rated 0.16-0.45 L/h of the Sunster 2 kW heater. To calibrate, compare the Fuel Used sensor with a measured refill and scale both values by actual/estimated.",
+        "data": {
+          "fuel_min_rate": "Consumption at level 1 (L/h)",
+          "fuel_max_rate": "Consumption at level 10 (L/h)"
+        }
+      }
+    },
+    "error": {
+      "invalid_fuel_rates": "The level 1 rate must not be higher than the level 10 rate."
+    }
   }
 }

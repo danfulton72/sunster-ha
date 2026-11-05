@@ -40,9 +40,21 @@ Where supported by the controller, the integration exposes:
 - Ambient and heater temperatures
 - Supply voltage, altitude and CO
 - Current level and remaining runtime
-- Run state/step, fault details, protocol/mainboard type and firmware diagnostics
+- Run state/step, fault details, mainboard type and hardware version diagnostics
+- Estimated fuel consumption rate (L/h) and total fuel used (L)
 
 The integration is capability-driven. V2.1 uses `0xFF` and capability nibbles for unavailable settings; unsupported controls are unavailable and their raw values are preserved when other settings are written.
+
+## Fuel consumption
+
+The controller does not report fuel flow, so the integration estimates it. Each heater level is a fixed fuel-pump pulse rate, so the rate is interpolated linearly between the consumption at level 1 and at level 10, using the level the heater is actually running at (in temperature mode this follows the controller's automatic level changes).
+
+- **Fuel Consumption Rate** (L/h) reads 0 when the heater is off, disconnected or in ventilation mode.
+- **Fuel Used** (L) is a running total that survives restarts. It is a `total_increasing` volume sensor, so it works with Utility Meter helpers (daily/monthly), statistics and cost templates.
+
+The defaults are the rated **0.16–0.45 L/h** of the Sunster 2 kW split heater (SH B2 / A2200BS). For another heater, or to calibrate, open **Settings → Devices & services → Sunster Diesel Heater → Configure** and set the level 1 and level 10 rates. A simple calibration: brim the tank, run for a few days, refill and measure, then multiply both rates by *measured litres ÷ Fuel Used increase*.
+
+Limitations: glow-plug ignition and cooldown are treated like normal running at the reported level, high-altitude pump trimming is not modelled, and gaps of more than five minutes without a status update (Home Assistant restart, Bluetooth dropout) are not counted.
 
 ### Heaters without a fuel tank
 

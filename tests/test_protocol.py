@@ -155,6 +155,32 @@ class ProtocolTests(unittest.TestCase):
         packet = protocol.set_mode(4)
         self.assertEqual(packet[8:10], bytes([4, 21]))
 
+    def test_level_change_in_ventilation_keeps_ventilation_mode(self):
+        # Issue #12: changing the fan level in ventilation must not start heating.
+        protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
+        protocol.set_mode(3)
+        packet = protocol.set_level(7)
+        self.assertEqual(packet[8:10], bytes([3, 7]))
+        self.assertEqual(protocol.last_mode, 3)
+
+    def test_level_change_in_ventilation_reported_by_status(self):
+        protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
+        raw = self.make_status()
+        raw[11] = 3  # running in ventilation mode
+        raw[12] = 4
+        protocol.parse_notification(raw)
+        self.assertTrue(protocol.is_on)
+        packet = protocol.set_level(6)
+        self.assertEqual(packet[6:10], bytes([1, 1, 3, 6]))
+
+    def test_level_change_from_temperature_mode_switches_to_level(self):
+        protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
+        protocol.last_mode = 2
+        protocol.last_param = 21
+        packet = protocol.set_level(5)
+        self.assertEqual(packet[8:10], bytes([1, 5]))
+        self.assertEqual(protocol.last_mode, 1)
+
     def test_short_device_info_frame_for_11240905(self):
         protocol = SunsterProtocol("AA:BB:CC:DD:EE:FF")
         raw = bytearray(25)
