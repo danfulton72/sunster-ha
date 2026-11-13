@@ -44,6 +44,19 @@ class FuelTests(unittest.TestCase):
         self.assertAlmostEqual(fuel.fuel_rate(running(level=10)), 0.45)
         self.assertAlmostEqual(fuel.fuel_rate(running(level=1, running_mode=2)), 0.16)
 
+    def test_plus_mode_burns_at_level_10_rate_by_default(self):
+        # Plus / High heat (mode 4) reports level 11, shown as "MAX" in the app.
+        self.assertAlmostEqual(fuel.fuel_rate(running(level=11, running_mode=4)), 0.45)
+        self.assertAlmostEqual(fuel.fuel_rate(running(level=11, running_mode=4), 0.1, 0.6), 0.6)
+
+    def test_plus_mode_uses_its_own_rate_when_set(self):
+        self.assertAlmostEqual(fuel.fuel_rate(running(level=11, running_mode=4), 0.16, 0.45, 0.52), 0.52)
+        # The Plus rate never applies to normal levels.
+        self.assertAlmostEqual(fuel.fuel_rate(running(level=10), 0.16, 0.45, 0.52), 0.45)
+
+    def test_plus_mode_off_is_zero(self):
+        self.assertEqual(fuel.fuel_rate(running(level=11, running_mode=4, running_state=0)), 0.0)
+
     def test_litres_integration(self):
         # One hour at 0.45 L/h in 15 s steps is 0.45 L.
         total = sum(fuel.litres_used(0.45, 15) for _ in range(240))

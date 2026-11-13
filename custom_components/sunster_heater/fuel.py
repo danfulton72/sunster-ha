@@ -13,6 +13,9 @@ DEFAULT_MIN_RATE = 0.16
 DEFAULT_MAX_RATE = 0.45
 MIN_LEVEL = 1
 MAX_LEVEL = 10
+# Plus ("High heat", mode 4) runs the heater flat out and reports level 11;
+# the official app shows any level of 11 or more as "MAX".
+PLUS_LEVEL = 11
 RUN_MODE_VENTILATION = 3
 
 # Longest gap between two status updates that is integrated. A longer gap means
@@ -35,14 +38,26 @@ def is_burning(data: dict[str, Any]) -> bool:
     if data.get("running_mode") == RUN_MODE_VENTILATION:
         return False
     level = data.get("current_level")
-    return isinstance(level, int) and MIN_LEVEL <= level <= MAX_LEVEL
+    return isinstance(level, int) and level >= MIN_LEVEL
 
 
-def fuel_rate(data: dict[str, Any], min_rate: float = DEFAULT_MIN_RATE, max_rate: float = DEFAULT_MAX_RATE) -> float:
-    """Return the estimated consumption in L/h for a parsed status frame."""
+def fuel_rate(
+    data: dict[str, Any],
+    min_rate: float = DEFAULT_MIN_RATE,
+    max_rate: float = DEFAULT_MAX_RATE,
+    plus_rate: float | None = None,
+) -> float:
+    """Return the estimated consumption in L/h for a parsed status frame.
+
+    Levels above 10 (Plus mode) use ``plus_rate``, which defaults to the
+    level 10 rate because the heater does not report its pump rate.
+    """
     if not is_burning(data):
         return 0.0
-    return rate_for_level(data["current_level"], min_rate, max_rate)
+    level = data["current_level"]
+    if level >= PLUS_LEVEL:
+        return max_rate if plus_rate is None else plus_rate
+    return rate_for_level(level, min_rate, max_rate)
 
 
 def litres_used(rate_lph: float, elapsed_seconds: float) -> float:

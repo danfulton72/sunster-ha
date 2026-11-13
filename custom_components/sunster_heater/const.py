@@ -10,3 +10,4 @@ STATE_OFF = 0
 STATE_ON = 1
 CONF_FUEL_MIN_RATE = "fuel_min_rate"
 CONF_FUEL_MAX_RATE = "fuel_max_rate"
+CONF_FUEL_PLUS_RATE = "fuel_plus_rate"

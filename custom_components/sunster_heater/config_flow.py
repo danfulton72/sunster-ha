@@ -12,7 +12,7 @@ from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import callback
 
-from .const import CONF_FUEL_MAX_RATE, CONF_FUEL_MIN_RATE, CONF_PIN, DEFAULT_PIN, DOMAIN, SERVICE_UUID
+from .const import CONF_FUEL_MAX_RATE, CONF_FUEL_MIN_RATE, CONF_FUEL_PLUS_RATE, CONF_PIN, DEFAULT_PIN, DOMAIN, SERVICE_UUID
 from .fuel import DEFAULT_MAX_RATE, DEFAULT_MIN_RATE
 
 _LOGGER = logging.getLogger(__name__)
@@ -181,6 +181,13 @@ class SunsterOptionsFlow(config_entries.OptionsFlow):
                     vol.Required(
                         CONF_FUEL_MAX_RATE,
                         default=options.get(CONF_FUEL_MAX_RATE, DEFAULT_MAX_RATE),
+                    ): _RATE,
+                    vol.Required(
+                        CONF_FUEL_PLUS_RATE,
+                        default=options.get(
+                            CONF_FUEL_PLUS_RATE,
+                            options.get(CONF_FUEL_MAX_RATE, DEFAULT_MAX_RATE),
+                        ),
                     ): _RATE,
                 }
             ),

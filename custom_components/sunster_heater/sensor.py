@@ -9,7 +9,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import CONF_FUEL_MAX_RATE, CONF_FUEL_MIN_RATE, DOMAIN
+from .const import CONF_FUEL_MAX_RATE, CONF_FUEL_MIN_RATE, CONF_FUEL_PLUS_RATE, DOMAIN
 from .fuel import DEFAULT_MAX_RATE, DEFAULT_MIN_RATE, fuel_rate, litres_used
 
 # Diagnostic sensors that earlier versions created and this version no longer does.
@@ -57,9 +57,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     min_rate = float(entry.options.get(CONF_FUEL_MIN_RATE, DEFAULT_MIN_RATE))
     max_rate = float(entry.options.get(CONF_FUEL_MAX_RATE, DEFAULT_MAX_RATE))
+    plus_rate = float(entry.options.get(CONF_FUEL_PLUS_RATE, max_rate))
+    rates = (min_rate, max_rate, plus_rate)
     entities: list[SensorEntity] = [SunsterSensor(coordinator, desc) for desc in SENSORS]
-    entities.append(SunsterFuelRateSensor(coordinator, min_rate, max_rate))
-    entities.append(SunsterFuelUsedSensor(coordinator, min_rate, max_rate))
+    entities.append(SunsterFuelRateSensor(coordinator, rates))
+    entities.append(SunsterFuelUsedSensor(coordinator, rates))
     async_add_entities(entities)
 
 
@@ -95,10 +97,9 @@ class SunsterSensor(CoordinatorEntity, SensorEntity):
 
 
 class _SunsterFuelBase(CoordinatorEntity):
-    def __init__(self, coordinator, key: str, name: str, min_rate: float, max_rate: float):
+    def __init__(self, coordinator, key: str, name: str, rates: tuple[float, float, float]):
         super().__init__(coordinator)
-        self._min_rate = min_rate
-        self._max_rate = max_rate
+        self._rates = rates
         self._attr_name = name
         self._attr_unique_id = f"{coordinator.address}_{key}"
         self._attr_device_info = {"identifiers": {(DOMAIN, coordinator.address)}}
@@ -107,7 +108,7 @@ class _SunsterFuelBase(CoordinatorEntity):
     def _current_rate(self) -> float:
         if not self.coordinator.last_update_success:
             return 0.0
-        return fuel_rate(self.coordinator.data or {}, self._min_rate, self._max_rate)
+        return fuel_rate(self.coordinator.data or {}, *self._rates)
 
 
 class SunsterFuelRateSensor(_SunsterFuelBase, SensorEntity):
@@ -117,8 +118,8 @@ class SunsterFuelRateSensor(_SunsterFuelBase, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 3
 
-    def __init__(self, coordinator, min_rate: float, max_rate: float):
-        super().__init__(coordinator, "fuel_rate", "Fuel Consumption Rate", min_rate, max_rate)
+    def __init__(self, coordinator, rates: tuple[float, float, float]):
+        super().__init__(coordinator, "fuel_rate", "Fuel Consumption Rate", rates)
 
     @property
     def native_value(self):
@@ -133,8 +134,8 @@ class SunsterFuelUsedSensor(_SunsterFuelBase, RestoreSensor):
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_suggested_display_precision = 2
 
-    def __init__(self, coordinator, min_rate: float, max_rate: float):
-        super().__init__(coordinator, "fuel_used", "Fuel Used", min_rate, max_rate)
+    def __init__(self, coordinator, rates: tuple[float, float, float]):
+        super().__init__(coordinator, "fuel_used", "Fuel Used", rates)
         self._total = 0.0
         self._last_rate = 0.0
         self._last_time: float | None = None
