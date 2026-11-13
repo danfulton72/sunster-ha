@@ -27,7 +27,7 @@ Validated/control paths include:
 
 Where supported by the controller, the integration exposes:
 
-- Climate power, current temperature and target temperature
+- Thermostat (climate) card covering every mode, see below
 - Heater level 1-10
 - Operating mode
 - Temperature and altitude units
@@ -44,6 +44,22 @@ Where supported by the controller, the integration exposes:
 - Estimated fuel consumption rate (L/h) and total fuel used (L)
 
 The integration is capability-driven. V2.1 uses `0xFF` and capability nibbles for unavailable settings; unsupported controls are unavailable and their raw values are preserved when other settings are written.
+
+## Thermostat card
+
+The climate entity controls the whole heater from one card:
+
+| Card control | Heater |
+|---|---|
+| HVAC **Off** | Off |
+| HVAC **Heat** + preset **Temperature** | Temperature (thermostat) mode |
+| HVAC **Heat** + preset **Level** | Level mode |
+| HVAC **Heat** + preset **Max** | Plus / High heat |
+| HVAC **Fan only** | Ventilation (fan, no burning) |
+
+Fan modes `1`-`10` set the heat level in Level mode and the fan speed in Fan only. The card shows only the control that matters in the current mode: target temperature in Temperature mode, the level in Level and Fan only, and neither in Max. Presets and Fan only appear only when the controller supports them. Switching from Fan only back to Heat returns to the last heating mode used. Setting a temperature (for example from an automation) switches to Temperature mode, and setting a level from a heating mode switches to Level mode, as the official app does.
+
+The Operating Mode select and Heat Level slider still work alongside the card.
 
 ## Fuel consumption
 
