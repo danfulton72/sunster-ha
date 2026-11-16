@@ -119,7 +119,7 @@ class SunsterClimate(CoordinatorEntity, ClimateEntity):
         return str(level) if isinstance(level, int) and 1 <= level <= 10 else None
 
     @property
-    def temperature_unit(self):
+    def native_temperature_unit(self):
         return UnitOfTemperature.FAHRENHEIT if self._data.get("temp_unit") == 1 else UnitOfTemperature.CELSIUS
 
     @property
@@ -131,11 +131,11 @@ class SunsterClimate(CoordinatorEntity, ClimateEntity):
         return 97 if self._data.get("temp_unit") == 1 else 36
 
     @property
-    def current_temperature(self):
+    def native_current_temperature(self):
         return self._data.get("ambient_temperature")
 
     @property
-    def target_temperature(self):
+    def native_target_temperature(self):
         if self._mode != MODE_TEMPERATURE:
             return None
         return self._data.get("set_temp", self.coordinator.protocol.last_param)
