@@ -89,6 +89,14 @@ To rename it later, open **Settings → Devices & services → Devices**, select
 
 Heaters added before naming was available keep the name **Sunster Diesel Heater** and their existing entity IDs.
 
+### Heater model
+
+The controller reports only a part number (the **Product Part Number** diagnostic sensor, for example `11240905`). This is recorded as the device's model ID. To show the real model on the device page, the integration asks the manufacturer's server (Booyood, who make the Sunster app) which product the part number belongs to, exactly as the official app does. No account is needed, and nothing but the part number is sent.
+
+- It runs automatically for new and existing installs whenever the device has no model for its part number, at most once per Home Assistant start, and stops once the model is known.
+- If the server can't be reached or doesn't know the part number, the device simply shows no model; the heater keeps working normally and the lookup is tried again at the next start.
+- To keep the integration fully offline, open **Configure** and turn off **Look up the heater model online**.
+
 You can also go to **Settings → Devices & services → Add Integration → Sunster Diesel Heater**. The setup flow performs an active Bluetooth scan and presents discovered heaters in a picker; you do not need to know or type the Bluetooth address.
 
 Manual installation: copy `custom_components/sunster_heater` to `/config/custom_components/sunster_heater` and restart Home Assistant. Bluetooth discovery works the same way after restart.
