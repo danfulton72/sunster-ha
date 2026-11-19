@@ -20,6 +20,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class SunsterModeSelect(CoordinatorEntity, SelectEntity):
+    _attr_has_entity_name = True
     _attr_name = "Operating Mode"
 
     def __init__(self, coordinator):
@@ -41,6 +42,7 @@ class SunsterModeSelect(CoordinatorEntity, SelectEntity):
 
 
 class SunsterUnitSelect(CoordinatorEntity, SelectEntity):
+    _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator, name, key, capability, choices):
@@ -67,6 +69,7 @@ class SunsterUnitSelect(CoordinatorEntity, SelectEntity):
 
 
 class SunsterLanguageSelect(CoordinatorEntity, SelectEntity):
+    _attr_has_entity_name = True
     _attr_name = "Voice Language"
     _attr_entity_category = EntityCategory.CONFIG
 

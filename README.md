@@ -81,6 +81,14 @@ Fuel tank and pump-model fields are decoded so their capability state is preserv
 
 Add this repository to HACS as a custom repository of category **Integration**, install it, and restart Home Assistant. With the heater powered on and in Bluetooth range, Home Assistant should automatically discover **Sunster Diesel Heater** and offer a setup notification. Select it and enter the controller PIN (default `1234`).
 
+### Naming the heater
+
+During setup you give the heater a name (default **Sunster Diesel Heater**). The device takes that name and every entity name is built from it, for example **Van Heater Ambient Temperature**, with entity IDs such as `sensor.van_heater_ambient_temperature`. The climate entity is named after the heater itself.
+
+To rename it later, open **Settings → Devices & services → Devices**, select the heater and use the pencil icon. All entity names follow the new name, and Home Assistant offers to rename the entity IDs too. If you accept, update any automations, dashboards or ESPHome configs that refer to the old IDs.
+
+Heaters added before naming was available keep the name **Sunster Diesel Heater** and their existing entity IDs.
+
 You can also go to **Settings → Devices & services → Add Integration → Sunster Diesel Heater**. The setup flow performs an active Bluetooth scan and presents discovered heaters in a picker; you do not need to know or type the Bluetooth address.
 
 Manual installation: copy `custom_components/sunster_heater` to `/config/custom_components/sunster_heater` and restart Home Assistant. Bluetooth discovery works the same way after restart.

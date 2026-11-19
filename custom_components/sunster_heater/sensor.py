@@ -66,6 +66,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class SunsterSensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True
     def __init__(self, coordinator, desc: Description):
         super().__init__(coordinator)
         self.desc = desc
@@ -97,6 +98,7 @@ class SunsterSensor(CoordinatorEntity, SensorEntity):
 
 
 class _SunsterFuelBase(CoordinatorEntity):
+    _attr_has_entity_name = True
     def __init__(self, coordinator, key: str, name: str, rates: tuple[float, float, float]):
         super().__init__(coordinator)
         self._rates = rates

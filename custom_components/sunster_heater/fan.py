@@ -7,6 +7,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities([SunsterLevel(entry.runtime_data)])
 
 class SunsterLevel(CoordinatorEntity, FanEntity):
+    _attr_has_entity_name = True
     _attr_name = "Level"
     _attr_supported_features = FanEntityFeature.SET_SPEED
     _attr_speed_count = 10

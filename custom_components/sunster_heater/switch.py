@@ -13,13 +13,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class SunsterPower(CoordinatorEntity, SwitchEntity):
+    _attr_has_entity_name = True
     _attr_name = "Power"
     _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:radiator"
     def __init__(self, coordinator):
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.address}_power"
-        self._attr_device_info = {"identifiers": {(DOMAIN, coordinator.address)}, "name": "Sunster Diesel Heater", "manufacturer": "Sunster", "model": "S-A2409PRO"}
+        self._attr_device_info = {"identifiers": {(DOMAIN, coordinator.address)}}
     @property
     def is_on(self):
         return self.coordinator.data.get("running_state") == 1
@@ -30,6 +31,7 @@ class SunsterPower(CoordinatorEntity, SwitchEntity):
 
 
 class SunsterSettingSwitch(CoordinatorEntity, SwitchEntity):
+    _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator, name, key, capability, setting_key, enabled_default):

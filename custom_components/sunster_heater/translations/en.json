@@ -3,16 +3,18 @@
     "step": {
       "user": {
         "title": "Sunster heater",
-        "description": "Select a discovered Sunster heater and enter the controller PIN.",
+        "description": "Select a discovered Sunster heater, give it a name and enter the controller PIN. Entity names are built from the heater name; you can rename the device later in Home Assistant.",
         "data": {
           "address": "Discovered heater",
+          "name": "Name",
           "pin": "PIN"
         }
       },
       "bluetooth_confirm": {
         "title": "Set up {name}",
-        "description": "A Sunster diesel heater was discovered by Bluetooth. Enter the controller PIN to add it.",
+        "description": "A Sunster diesel heater was discovered by Bluetooth. Give it a name and enter the controller PIN to add it. Entity names are built from the heater name; you can rename the device later in Home Assistant.",
         "data": {
+          "name": "Name",
           "pin": "PIN"
         }
       }

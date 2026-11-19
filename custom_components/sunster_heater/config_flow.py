@@ -9,10 +9,10 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-from homeassistant.const import CONF_ADDRESS
+from homeassistant.const import CONF_ADDRESS, CONF_NAME
 from homeassistant.core import callback
 
-from .const import CONF_FUEL_MAX_RATE, CONF_FUEL_MIN_RATE, CONF_FUEL_PLUS_RATE, CONF_PIN, DEFAULT_PIN, DOMAIN, SERVICE_UUID
+from .const import CONF_FUEL_MAX_RATE, CONF_FUEL_MIN_RATE, CONF_FUEL_PLUS_RATE, CONF_PIN, DEFAULT_NAME, DEFAULT_PIN, DOMAIN, SERVICE_UUID
 from .fuel import DEFAULT_MAX_RATE, DEFAULT_MIN_RATE
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +28,19 @@ def _is_sunster(discovery_info: BluetoothServiceInfoBleak) -> bool:
     return SERVICE_UUID.lower() in {
         service_uuid.lower()
         for service_uuid in (discovery_info.service_uuids or [])
+    }
+
+
+_NAME = vol.All(str, vol.Strip, vol.Length(min=1, max=64))
+
+
+def _entry(user_input: dict[str, Any], address: str) -> tuple[str, dict[str, Any]]:
+    """Return the entry title and data for a confirmed heater."""
+    name = user_input.get(CONF_NAME) or DEFAULT_NAME
+    return name, {
+        CONF_ADDRESS: address,
+        CONF_PIN: user_input.get(CONF_PIN, DEFAULT_PIN),
+        CONF_NAME: name,
     }
 
 
@@ -85,19 +98,15 @@ class SunsterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         title = _title(discovery_info)
 
         if user_input is not None:
-            return self.async_create_entry(
-                title=title,
-                data={
-                    CONF_ADDRESS: address,
-                    CONF_PIN: user_input.get(CONF_PIN, DEFAULT_PIN),
-                },
-            )
+            name, data = _entry(user_input, address)
+            return self.async_create_entry(title=name, data=data)
 
         self._set_confirm_only()
         return self.async_show_form(
             step_id="bluetooth_confirm",
             data_schema=vol.Schema(
                 {
+                    vol.Required(CONF_NAME, default=DEFAULT_NAME): _NAME,
                     vol.Optional(CONF_PIN, default=DEFAULT_PIN): vol.All(
                         vol.Coerce(int), vol.Range(min=0, max=9999)
                     )
@@ -112,14 +121,8 @@ class SunsterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             address = _normalise_address(user_input[CONF_ADDRESS])
             await self.async_set_unique_id(address, raise_on_progress=False)
             self._abort_if_unique_id_configured()
-            discovery_info = self._discovered_devices[address]
-            return self.async_create_entry(
-                title=_title(discovery_info),
-                data={
-                    CONF_ADDRESS: address,
-                    CONF_PIN: user_input.get(CONF_PIN, DEFAULT_PIN),
-                },
-            )
+            name, data = _entry(user_input, address)
+            return self.async_create_entry(title=name, data=data)
 
         await bluetooth.async_request_active_scan(self.hass)
         current_addresses = {
@@ -147,6 +150,7 @@ class SunsterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_ADDRESS): vol.In(devices),
+                    vol.Required(CONF_NAME, default=DEFAULT_NAME): _NAME,
                     vol.Optional(CONF_PIN, default=DEFAULT_PIN): vol.All(
                         vol.Coerce(int), vol.Range(min=0, max=9999)
                     ),

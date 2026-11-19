@@ -24,6 +24,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class SunsterHeatLevel(CoordinatorEntity, NumberEntity):
+    _attr_has_entity_name = True
     _attr_name = "Heat Level"
     _attr_native_min_value = 1
     _attr_native_max_value = 10
@@ -44,6 +45,7 @@ class SunsterHeatLevel(CoordinatorEntity, NumberEntity):
 
 
 class SunsterSettingNumber(CoordinatorEntity, NumberEntity):
+    _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
     _attr_native_step = 1
 
