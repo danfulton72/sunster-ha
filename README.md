@@ -87,7 +87,7 @@ During setup you give the heater a name (default **Sunster Diesel Heater**). The
 
 To rename it later, open **Settings → Devices & services → Devices**, select the heater and use the pencil icon. All entity names follow the new name, and Home Assistant offers to rename the entity IDs too. If you accept, update any automations, dashboards or ESPHome configs that refer to the old IDs.
 
-Heaters added before naming was available keep the name **Sunster Diesel Heater** and their existing entity IDs.
+Heaters added before naming was available take their name from the integration entry's title if you renamed it, otherwise **Sunster Diesel Heater**. Existing entity IDs are not changed automatically: after a rename, open the device and choose **⋮ → Recreate entity IDs**.
 
 ### Heater model
 

@@ -21,12 +21,11 @@ async def async_setup_entry(hass, entry):
     if ble_device is None:
         raise ConfigEntryNotReady(f"Sunster heater {address} not currently discoverable")
     # The device carries the heater's name; every entity name is built from it,
-    # so renaming the device in Home Assistant renames all of them. Entries
-    # created before naming was added keep the original name.
+    # so renaming the device in Home Assistant renames all of them.
     device_entry = dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, address)},
-        name=entry.data.get(CONF_NAME, DEFAULT_NAME),
+        name=device_name(entry.data, entry.title),
         manufacturer="Sunster",
     )
     coord = SunsterCoordinator(hass, ble_device, entry)
@@ -36,6 +35,23 @@ async def async_setup_entry(hass, entry):
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True
+
+
+def device_name(data, title: str | None) -> str:
+    """Return the heater's name for its device.
+
+    The name given at setup wins. Entries added before setup asked for a name
+    use their entry title if it was renamed from the automatic one (which ends
+    with the last four characters of the Bluetooth address), otherwise
+    "Sunster Diesel Heater".
+    """
+    if name := (data.get(CONF_NAME) or "").strip():
+        return name
+    title = (title or "").strip()
+    suffix = data[CONF_ADDRESS].replace(":", "").replace("-", "")[-4:].upper()
+    if title and not title.upper().endswith(suffix):
+        return title
+    return DEFAULT_NAME
 
 
 def _async_setup_model_lookup(hass, entry, coord, device_id) -> None:
